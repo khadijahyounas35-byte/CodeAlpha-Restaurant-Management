@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>CodeAlpha Restaurant Management</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', Arial, sans-serif;
+    background: linear-gradient(135deg, #b91c1c, #ea580c);
+    min-height: 100vh;
+    margin: 0;
+    padding: 2rem 1rem;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { color: #fff; text-align: center; margin-bottom: 1.5rem; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media (max-width: 700px) { .grid { grid-template-columns: 1fr; } }
+  .card {
+    background: #fff;
+    padding: 1.2rem;
+    border-radius: 14px;
+    box-shadow: 0 15px 30px rgba(0,0,0,0.15);
+    margin-bottom: 1rem;
+  }
+  .card h2 { margin-top: 0; font-size: 1.1rem; color: #111827; }
+  ul { list-style: none; padding: 0; margin: 0; }
+  li { padding: 0.4rem 0; border-bottom: 1px solid #f3f4f6; font-size: 0.9rem; display: flex; justify-content: space-between; }
+  .tag { padding: 2px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: 600; }
+  .available { background: #d1fae5; color: #059669; }
+  .occupied, .reserved { background: #fee2e2; color: #dc2626; }
+  .low { color: #dc2626; font-weight: 600; }
+  select, input, button {
+    padding: 0.5rem;
+    border-radius: 6px;
+    border: 1px solid #d1d5db;
+    font-size: 0.88rem;
+    margin: 0.2rem 0;
+    width: 100%;
+  }
+  button { background: #b91c1c; color: #fff; border: none; cursor: pointer; margin-top: 0.4rem; }
+  button:hover { opacity: 0.9; }
+  .msg { font-size: 0.85rem; margin-top: 0.4rem; }
+  .msg.ok { color: #059669; }
+  .msg.err { color: #dc2626; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🍽️ CodeAlpha Restaurant Management</h1>
+  <div class="grid">
+    <div class="card">
+      <h2>📋 Menu</h2>
+      <ul id="menu"></ul>
+    </div>
+    <div class="card">
+      <h2>📦 Inventory</h2>
+      <ul id="inventory"></ul>
+    </div>
+    <div class="card">
+      <h2>🪑 Tables</h2>
+      <ul id="tables"></ul>
+    </div>
+    <div class="card">
+      <h2>🧾 Place an Order</h2>
+      <select id="tableSelect"></select>
+      <select id="menuSelect"></select>
+      <input id="qty" type="number" min="1" value="1" placeholder="Quantity" />
+      <button onclick="placeOrder()">Place Order</button>
+      <div class="msg" id="orderMsg"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>📑 Recent Orders</h2>
+    <ul id="orders"></ul>
+  </div>
+</div>
+
+<script>
+async function loadAll() {
+  const [menu, inventory, tables, orders] = await Promise.all([
+    fetch('/api/menu').then(r => r.json()),
+    fetch('/api/inventory').then(r => r.json()),
+    fetch('/api/tables').then(r => r.json()),
+    fetch('/api/orders').then(r => r.json()),
+  ]);
+
+  document.getElementById('menu').innerHTML = menu.map(m =>
+    `<li><span>${m.name} <small>(${m.category})</small></span><span>Rs ${m.price}</span></li>`
+  ).join('');
+
+  document.getElementById('inventory').innerHTML = inventory.map(i =>
+    `<li><span>${i.ingredient}</span><span class="${i.low ? 'low' : ''}">${i.quantity} ${i.unit}</span></li>`
+  ).join('');
+
+  document.getElementById('tables').innerHTML = tables.map(t =>
+    `<li><span>Table ${t.table_number} (${t.seats} seats)</span><span class="tag ${t.status}">${t.status}</span></li>`
+  ).join('');
+
+  document.getElementById('orders').innerHTML = orders.slice(0, 6).map(o =>
+    `<li><span>Order #${o.id} — ${o.items.map(i => i.name + ' x' + i.quantity).join(', ')}</span><span>Rs ${o.total} (${o.status})</span></li>`
+  ).join('') || '<li>No orders yet</li>';
+
+  const tableSelect = document.getElementById('tableSelect');
+  tableSelect.innerHTML = tables.map(t => `<option value="${t.id}">Table ${t.table_number}</option>`).join('');
+
+  const menuSelect = document.getElementById('menuSelect');
+  menuSelect.innerHTML = menu.map(m => `<option value="${m.id}">${m.name} - Rs ${m.price}</option>`).join('');
+}
+
+async function placeOrder() {
+  const table_id = Number(document.getElementById('tableSelect').value);
+  const menu_item_id = Number(document.getElementById('menuSelect').value);
+  const quantity = Number(document.getElementById('qty').value) || 1;
+  const msgEl = document.getElementById('orderMsg');
+  try {
+    const res = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ table_id, items: [{ menu_item_id, quantity }] })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error);
+    msgEl.textContent = `Order #${data.id} placed! Total: Rs ${data.total}`;
+    msgEl.className = 'msg ok';
+    loadAll();
+  } catch (err) {
+    msgEl.textContent = err.message;
+    msgEl.className = 'msg err';
+  }
+}
+
+loadAll();
+</script>
+</body>
+</html>
